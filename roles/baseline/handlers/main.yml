@@ -1,0 +1,8 @@
+---
+# Baseline Handlers
+
+- name: Restart Alloy
+  community.docker.docker_compose_v2:
+    project_src: "{{ alloy_install_path }}"
+    state: present
+    pull: missing

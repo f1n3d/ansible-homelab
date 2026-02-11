@@ -1,0 +1,19 @@
+---
+# Docmost Secrets
+# Copy to vault.yml and encrypt: ansible-vault encrypt vault.yml
+
+# Application URL
+docmost_app_url: "https://docs.example.com"
+
+# Application Secret (generate with: openssl rand -hex 32)
+docmost_app_secret: "CHANGE_ME"
+
+# Database
+docmost_postgres_password: "CHANGE_ME"
+
+# SMTP Configuration (for email notifications)
+docmost_smtp_host: "smtp.example.com"
+docmost_smtp_username: "user@example.com"
+docmost_smtp_password: "CHANGE_ME"
+docmost_mail_from_address: "docs@example.com"
+docmost_mail_from_name: "Docmost"

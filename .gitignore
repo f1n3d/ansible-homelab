@@ -1,0 +1,26 @@
+# Ansible
+*.retry
+ansible.log
+
+# Vault password file
+.vault_pass
+vault_pass
+*.vault_pass
+
+# Encrypted vault files (only commit .example files)
+inventory/group_vars/*/vault.yml
+!inventory/group_vars/*/vault.yml.example
+
+# Setup script state
+.setup-answers.env
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

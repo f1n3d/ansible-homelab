@@ -1,0 +1,22 @@
+---
+# Paperless-NGX Secrets
+# Copy to vault.yml and encrypt: ansible-vault encrypt vault.yml
+
+# Database
+paperless_postgres_password: "CHANGE_ME"
+
+# Application Secret (generate with: openssl rand -base64 50)
+paperless_secret_key: "CHANGE_ME"
+
+# Admin Account (created on first start)
+paperless_admin_user: "admin"
+paperless_admin_password: "CHANGE_ME"
+paperless_admin_email: "admin@example.com"
+
+# External URL (used for OIDC redirect)
+paperless_url: "https://paperless.example.com"
+
+# OIDC Configuration (optional - requires Authentik)
+# Uncomment and fill in if using Authentik for SSO
+# paperless_oidc_client_id: ""
+# paperless_oidc_client_secret: ""

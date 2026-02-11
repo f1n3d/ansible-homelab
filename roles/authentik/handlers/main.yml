@@ -1,0 +1,8 @@
+---
+# Authentik Handlers
+
+- name: Restart Authentik stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ authentik_install_path }}"
+    state: present
+    pull: missing

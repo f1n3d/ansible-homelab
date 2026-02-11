@@ -1,0 +1,30 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Cloudflared Container Update Script
+
+set -e
+
+INSTALL_PATH="{{ cloudflared_install_path }}"
+LOGFILE="{{ cloudflared_install_path }}/update.log"
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOGFILE"
+}
+
+log "=== Starting Cloudflared update ==="
+
+cd "$INSTALL_PATH"
+
+# 1. Neue Images pullen
+log "Pulling new Docker images..."
+docker compose pull
+
+# 2. Container neu starten
+log "Starting updated containers..."
+docker compose up -d --remove-orphans
+
+# 3. Aufräumen alter Docker Images
+log "Cleaning up unused Docker images..."
+docker image prune -f > /dev/null 2>&1 || true
+
+log "=== Cloudflared update completed ==="

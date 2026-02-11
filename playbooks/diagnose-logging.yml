@@ -1,0 +1,351 @@
+---
+# =============================================================================
+# Diagnose-Playbook: Logging Stack Analyse
+# =============================================================================
+# Prüft den gesamten Logging-Stack:
+#   1. Loki Health & verfügbare Labels
+#   2. Alloy Status auf allen Containern
+#   3. Sample-Queries gegen Loki API
+#
+# Aufruf:
+#   ansible-playbook playbooks/diagnose-logging.yml
+# =============================================================================
+
+# =============================================================================
+# Phase 1: Loki API Diagnose (auf chronicle-server)
+# =============================================================================
+- name: "Phase 1: Loki API Diagnose"
+  hosts: chronicle-server
+  gather_facts: false
+  tasks:
+
+    - name: "1.1 - Loki Health Check"
+      ansible.builtin.uri:
+        url: "http://localhost:3100/ready"
+        method: GET
+        return_content: true
+        status_code: [200]
+      register: loki_health
+      failed_when: false
+
+    - name: "1.1 - Ergebnis Loki Health"
+      ansible.builtin.debug:
+        msg: >-
+          Loki Status: {{ 'HEALTHY' if loki_health.status == 200 else 'UNHEALTHY (Status ' + (loki_health.status | string) + ')' }}
+
+    - name: "1.2 - Alle verfügbaren Labels abfragen"
+      ansible.builtin.uri:
+        url: "http://localhost:3100/loki/api/v1/labels"
+        method: GET
+        return_content: true
+      register: loki_labels
+      failed_when: false
+
+    - name: "1.2 - Ergebnis: Verfügbare Labels"
+      ansible.builtin.debug:
+        msg:
+          - "Status: {{ loki_labels.json.status | default('FEHLER') }}"
+          - "Labels: {{ loki_labels.json.data | default([]) }}"
+      when: loki_labels.status == 200
+
+    - name: "1.3 - Label-Werte: host (welche Server senden Logs?)"
+      ansible.builtin.uri:
+        url: "http://localhost:3100/loki/api/v1/label/host/values"
+        method: GET
+        return_content: true
+      register: loki_hosts
+      failed_when: false
+
+    - name: "1.3 - Ergebnis: Hosts die Logs senden"
+      ansible.builtin.debug:
+        msg:
+          - "Aktive Hosts: {{ loki_hosts.json.data | default([]) }}"
+          - "Anzahl: {{ (loki_hosts.json.data | default([])) | length }}"
+      when: loki_hosts.status == 200
+
+    - name: "1.4 - Label-Werte: job (Log-Typen)"
+      ansible.builtin.uri:
+        url: "http://localhost:3100/loki/api/v1/label/job/values"
+        method: GET
+        return_content: true
+      register: loki_jobs
+      failed_when: false
+
+    - name: "1.4 - Ergebnis: Verfügbare Job-Labels"
+      ansible.builtin.debug:
+        msg:
+          - "Jobs: {{ loki_jobs.json.data | default([]) }}"
+          - "Erwartet: [auth, docker, kernel, syslog]"
+      when: loki_jobs.status == 200
+
+    - name: "1.5 - Label-Werte: container (Docker Container-Namen)"
+      ansible.builtin.uri:
+        url: "http://localhost:3100/loki/api/v1/label/container/values"
+        method: GET
+        return_content: true
+      register: loki_containers
+      failed_when: false
+
+    - name: "1.5 - Ergebnis: Docker Container-Labels"
+      ansible.builtin.debug:
+        msg:
+          - "Container: {{ loki_containers.json.data | default([]) }}"
+      when: loki_containers.status == 200
+
+    - name: "1.6 - Label-Werte: environment"
+      ansible.builtin.uri:
+        url: "http://localhost:3100/loki/api/v1/label/environment/values"
+        method: GET
+        return_content: true
+      register: loki_env
+      failed_when: false
+
+    - name: "1.6 - Ergebnis: Environment-Labels"
+      ansible.builtin.debug:
+        msg:
+          - "Environments: {{ loki_env.json.data | default([]) }}"
+      when: loki_env.status == 200
+
+    - name: "1.7 - Label-Werte: unit (systemd units)"
+      ansible.builtin.uri:
+        url: "http://localhost:3100/loki/api/v1/label/unit/values"
+        method: GET
+        return_content: true
+      register: loki_units
+      failed_when: false
+
+    - name: "1.7 - Ergebnis: Systemd Unit-Labels"
+      ansible.builtin.debug:
+        msg:
+          - "Units: {{ loki_units.json.data | default([]) }}"
+      when: loki_units.status == 200
+
+    - name: "1.8 - Label-Werte: priority (Log-Priorität)"
+      ansible.builtin.uri:
+        url: "http://localhost:3100/loki/api/v1/label/priority/values"
+        method: GET
+        return_content: true
+      register: loki_priority
+      failed_when: false
+
+    - name: "1.8 - Ergebnis: Priority-Labels"
+      ansible.builtin.debug:
+        msg:
+          - "Priorities: {{ loki_priority.json.data | default([]) }}"
+      when: loki_priority.status == 200
+
+    - name: "1.9 - Label-Werte: syslog_identifier"
+      ansible.builtin.uri:
+        url: "http://localhost:3100/loki/api/v1/label/syslog_identifier/values"
+        method: GET
+        return_content: true
+      register: loki_syslog_id
+      failed_when: false
+
+    - name: "1.9 - Ergebnis: Syslog-Identifier"
+      ansible.builtin.debug:
+        msg:
+          - "Identifiers: {{ loki_syslog_id.json.data | default([]) }}"
+      when: loki_syslog_id.status == 200
+
+    # =========================================================================
+    # Sample-Queries: Testen ob Dashboard-Queries Daten liefern
+    # Nutzt ein Script-File um Quoting-Probleme zu vermeiden
+    # =========================================================================
+    - name: "2.0 - Query-Script erstellen"
+      ansible.builtin.copy:
+        dest: /tmp/loki-diagnose.sh
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          # Loki Query Helper - vermeidet Shell-Quoting-Probleme
+          LOKI="http://localhost:3100/loki/api/v1/query"
+
+          echo "=== QUERY_ALL ==="
+          curl -s -G "$LOKI" --data-urlencode 'query={environment="production"}' --data-urlencode 'limit=3'
+          echo ""
+
+          echo "=== QUERY_AUTH ==="
+          curl -s -G "$LOKI" --data-urlencode 'query={job="auth"}' --data-urlencode 'limit=3'
+          echo ""
+
+          echo "=== QUERY_DOCKER ==="
+          curl -s -G "$LOKI" --data-urlencode 'query={job="docker"}' --data-urlencode 'limit=3'
+          echo ""
+
+          echo "=== QUERY_SSH_FAIL ==="
+          curl -s -G "$LOKI" --data-urlencode 'query={job="auth"} |~ "(?i)failed password"' --data-urlencode 'limit=3'
+          echo ""
+
+          echo "=== QUERY_KERNEL ==="
+          curl -s -G "$LOKI" --data-urlencode 'query={job="kernel"}' --data-urlencode 'limit=3'
+          echo ""
+
+          echo "=== QUERY_SYSLOG ==="
+          curl -s -G "$LOKI" --data-urlencode 'query={job="syslog"}' --data-urlencode 'limit=3'
+          echo ""
+
+          echo "=== QUERY_JOURNALD ==="
+          curl -s -G "$LOKI" --data-urlencode 'query={job="journald"}' --data-urlencode 'limit=3'
+          echo ""
+
+          echo "=== QUERY_LOKISOURCE ==="
+          curl -s -G "$LOKI" --data-urlencode 'query={job="loki.source.journal.system_journal"}' --data-urlencode 'limit=3'
+          echo ""
+
+          echo "=== QUERY_SYSTEMD_JOURNAL ==="
+          curl -s -G "$LOKI" --data-urlencode 'query={job="systemd-journal"}' --data-urlencode 'limit=3'
+          echo ""
+
+          echo "=== QUERY_ERRORS ==="
+          curl -s -G "$LOKI" --data-urlencode 'query={environment="production"} |~ "(?i)(error|fail|fatal|critical)"' --data-urlencode 'limit=5'
+          echo ""
+
+          echo "=== VOLUME_HOST ==="
+          curl -s -G "$LOKI" --data-urlencode 'query=sum by(host) (count_over_time({environment="production"} [1h]))'
+          echo ""
+
+          echo "=== VOLUME_JOB ==="
+          curl -s -G "$LOKI" --data-urlencode 'query=sum by(job) (count_over_time({environment="production"} [1h]))'
+          echo ""
+
+    - name: "2.1 - Loki Queries ausfuehren"
+      ansible.builtin.shell:
+        cmd: /tmp/loki-diagnose.sh
+      register: loki_queries_raw
+      changed_when: false
+      failed_when: false
+
+    - name: "2.2 - Query-Ergebnisse parsen"
+      ansible.builtin.set_fact:
+        query_sections: "{{ loki_queries_raw.stdout | default('') }}"
+
+    - name: "2.3 - Raw Output anzeigen (fuer Debugging)"
+      ansible.builtin.debug:
+        msg: "{{ loki_queries_raw.stdout_lines | default(['KEINE AUSGABE - curl nicht installiert?']) }}"
+
+    - name: "2.4 - Cleanup"
+      ansible.builtin.file:
+        path: /tmp/loki-diagnose.sh
+        state: absent
+
+    # =========================================================================
+    # Zusammenfassung Phase 1
+    # =========================================================================
+    - name: "=== ZUSAMMENFASSUNG PHASE 1 ==="
+      ansible.builtin.debug:
+        msg:
+          - "=============================================="
+          - "  LOGGING STACK DIAGNOSE - ZUSAMMENFASSUNG"
+          - "=============================================="
+          - ""
+          - "Loki Health: {{ 'OK' if loki_health.status == 200 else 'FEHLER' }}"
+          - ""
+          - "Labels: {{ loki_labels.json.data | default([]) | join(', ') }}"
+          - ""
+          - "Hosts ({{ (loki_hosts.json.data | default([])) | length }}/7 erwartet):"
+          - "  {{ loki_hosts.json.data | default([]) | join(', ') }}"
+          - ""
+          - "Jobs (IST):  {{ loki_jobs.json.data | default([]) | join(', ') }}"
+          - "Jobs (SOLL): auth, docker, kernel, syslog"
+          - ""
+          - "Container: {{ loki_containers.json.data | default([]) | join(', ') }}"
+          - ""
+          - ">> Detaillierte Query-Ergebnisse siehe Raw Output oben"
+
+# =============================================================================
+# Phase 2: Alloy Status auf allen LXC Containern
+# =============================================================================
+- name: "Phase 2: Alloy Status auf allen Containern"
+  hosts: lxc_containers
+  gather_facts: false
+  tasks:
+
+    - name: "4.1 - Prüfe ob Alloy Container läuft"
+      community.docker.docker_container_info:
+        name: alloy
+      register: alloy_info
+      failed_when: false
+
+    - name: "4.1 - Alloy Container Status"
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}: Alloy {{ 'RUNNING (' + alloy_info.container.State.Status + ')'
+          if alloy_info.exists | default(false) and alloy_info.container.State.Status == 'running'
+          else 'NOT RUNNING!' if alloy_info.exists | default(false)
+          else 'NICHT INSTALLIERT!' }}
+
+    - name: "4.2 - Alloy Health Check"
+      ansible.builtin.uri:
+        url: "http://localhost:12345/-/healthy"
+        method: GET
+        return_content: true
+        status_code: [200]
+      register: alloy_health
+      failed_when: false
+      when: alloy_info.exists | default(false)
+
+    - name: "4.2 - Alloy Health Ergebnis"
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}: Alloy Health {{ 'OK' if alloy_health.status | default(0) == 200 else 'FEHLER (Status: ' + (alloy_health.status | default('N/A') | string) + ')' }}
+      when: alloy_info.exists | default(false)
+
+    - name: "4.3 - Alloy letzte Logs (10 Zeilen)"
+      ansible.builtin.command:
+        cmd: docker logs alloy --tail 10
+      register: alloy_logs
+      changed_when: false
+      failed_when: false
+      when: alloy_info.exists | default(false)
+
+    - name: "4.3 - Alloy Logs"
+      ansible.builtin.debug:
+        msg: "{{ alloy_logs.stderr_lines | default(alloy_logs.stdout_lines | default(['Keine Logs'])) }}"
+      when: alloy_info.exists | default(false) and alloy_logs.rc == 0
+
+# =============================================================================
+# Phase 3: Grafana Datasource UID Prüfung
+# =============================================================================
+- name: "Phase 3: Grafana Datasource Prüfung"
+  hosts: chronicle-server
+  gather_facts: false
+  tasks:
+
+    - name: "5.1 - Grafana Datasources ueber API abfragen"
+      ansible.builtin.uri:
+        url: "http://localhost:3000/api/datasources"
+        method: GET
+        return_content: true
+        url_username: "{{ grafana_admin_user }}"
+        url_password: "{{ grafana_admin_password }}"
+        force_basic_auth: true
+        status_code: [200, 401, 403, 500, 502]
+      register: grafana_ds
+      failed_when: false
+      no_log: true
+
+    - name: "5.1 - Ergebnis: Grafana Datasources"
+      ansible.builtin.debug:
+        msg:
+          - "Datasource: {{ item.name }}"
+          - "  UID: {{ item.uid }}"
+          - "  Type: {{ item.type }}"
+          - "  URL: {{ item.url }}"
+          - "  >> {{ 'UID MATCH (loki) - OK!' if item.uid == 'loki' else 'UID MISMATCH! Dashboards referenzieren uid=loki, aber UID ist: ' + item.uid }}"
+      loop: "{{ grafana_ds.json if grafana_ds.json is iterable and grafana_ds.json is not mapping else [] }}"
+      loop_control:
+        label: "{{ item.name | default('unknown') }}"
+      when: grafana_ds.status | default(0) == 200
+
+    - name: "5.1 - Grafana API Auth-Fehler"
+      ansible.builtin.debug:
+        msg: >-
+          Grafana API hat geantwortet (Status {{ grafana_ds.status }}), aber Ergebnis ist kein Array.
+          Moeglicherweise fehlende Berechtigung. Response: {{ grafana_ds.json | default('N/A') }}
+      when: grafana_ds.status | default(0) == 200 and (grafana_ds.json is mapping or grafana_ds.json is not iterable)
+
+    - name: "5.1 - Grafana API Fehler"
+      ansible.builtin.debug:
+        msg: "Grafana API nicht erreichbar (Status: {{ grafana_ds.status | default('N/A') }}). Laeuft Grafana?"
+      when: grafana_ds.status | default(0) != 200

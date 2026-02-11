@@ -1,0 +1,55 @@
+---
+# Contact API Deployment (Flask + Gunicorn)
+
+- name: Install python3-venv
+  ansible.builtin.apt:
+    name:
+      - python3-venv
+    state: present
+
+- name: Create contact-api installation directory
+  ansible.builtin.file:
+    path: "{{ contact_api_install_path }}"
+    state: directory
+    mode: "0755"
+
+- name: Deploy Flask application
+  ansible.builtin.template:
+    src: contact-api/app.py.j2
+    dest: "{{ contact_api_install_path }}/app.py"
+    mode: "0644"
+  notify: Restart Contact API
+
+- name: Deploy requirements.txt
+  ansible.builtin.template:
+    src: contact-api/requirements.txt.j2
+    dest: "{{ contact_api_install_path }}/requirements.txt"
+    mode: "0644"
+  notify: Restart Contact API
+
+- name: Create Python virtual environment
+  ansible.builtin.command:
+    cmd: python3 -m venv {{ contact_api_install_path }}/venv
+    creates: "{{ contact_api_install_path }}/venv/bin/activate"
+
+- name: Install Python dependencies in venv
+  ansible.builtin.pip:
+    requirements: "{{ contact_api_install_path }}/requirements.txt"
+    virtualenv: "{{ contact_api_install_path }}/venv"
+    state: present
+
+- name: Deploy systemd service file
+  ansible.builtin.template:
+    src: contact-api/contact-api.service.j2
+    dest: /etc/systemd/system/contact-api.service
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart Contact API
+
+- name: Enable and start contact-api service
+  ansible.builtin.systemd:
+    name: contact-api
+    enabled: yes
+    state: started
+    daemon_reload: yes

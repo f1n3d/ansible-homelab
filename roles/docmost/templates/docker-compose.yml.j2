@@ -1,0 +1,46 @@
+# Managed by Ansible - Änderungen werden überschrieben!
+# Template: roles/docmost/templates/docker-compose.yml.j2
+
+services:
+  docmost:
+    image: {{ docmost_image }}
+    container_name: docmost
+    depends_on:
+      - db
+      - redis
+    env_file:
+      - .env
+    ports:
+      - "{{ docmost_port }}:3000"
+    restart: unless-stopped
+    volumes:
+      - docmost_data:/app/data/storage
+
+  db:
+    image: {{ docmost_postgres_image }}
+    container_name: docmost-db
+    env_file:
+      - .env
+    restart: unless-stopped
+    stop_grace_period: 60s
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  redis:
+    image: {{ docmost_redis_image }}
+    container_name: docmost-redis
+    restart: unless-stopped
+    stop_grace_period: 30s
+    volumes:
+      - redis_data:/data
+
+volumes:
+  docmost_data:
+    external: true
+    name: docmost_docmost_data
+  db_data:
+    external: true
+    name: docmost_db_data
+  redis_data:
+    external: true
+    name: docmost_redis_data

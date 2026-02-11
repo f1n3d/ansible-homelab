@@ -1,0 +1,92 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [{ "asDropdown": true, "icon": "external link", "includeVars": true, "keepTime": true, "tags": [], "targetBlank": false, "title": "Dashboards", "type": "dashboards" }],
+  "liveNow": false,
+  "panels": [
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "id": 100, "title": "Samba Übersicht", "type": "row" },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }, "unit": "short" } },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 }, "id": 1,
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "datasource": { "type": "loki", "uid": "loki" }, "editorMode": "code", "expr": "sum(count_over_time({job=\"samba\", host=~\"$host\"} [$__range]))", "queryType": "range", "refId": "A" }],
+      "title": "Total Logs", "type": "stat"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 200 }] }, "unit": "short" } },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 }, "id": 2,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "datasource": { "type": "loki", "uid": "loki" }, "editorMode": "code", "expr": "sum(count_over_time({job=\"samba\", host=~\"$host\"} |~ \"(?i)(error|fatal|critical)\" [$__range]))", "queryType": "range", "refId": "A" }],
+      "title": "Errors", "type": "stat"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 100 }] }, "unit": "short" } },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 }, "id": 3,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "datasource": { "type": "loki", "uid": "loki" }, "editorMode": "code", "expr": "sum(count_over_time({job=\"samba\", host=~\"$host\"} |~ \"(?i)(warn)\" [$__range]))", "queryType": "range", "refId": "A" }],
+      "title": "Warnings", "type": "stat"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }, "unit": "short" } },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 }, "id": 4,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "datasource": { "type": "loki", "uid": "loki" }, "editorMode": "code", "expr": "sum(count_over_time({job=\"samba\", host=~\"$host\"} |~ \"(?i)(auth|login|session|connect)\" [$__range]))", "queryType": "range", "refId": "A" }],
+      "title": "Auth Events", "type": "stat"
+    },
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 }, "id": 101, "title": "Log-Rate", "type": "row" },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "Logs/s", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 20, "gradientMode": "none", "hideFrom": { "tooltip": false, "viz": false, "legend": false }, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }, "unit": "short" } },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 6 }, "id": 5,
+      "options": { "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "right", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "datasource": { "type": "loki", "uid": "loki" }, "editorMode": "code", "expr": "sum(rate({job=\"samba\", host=~\"$host\"} [$__auto]))", "legendFormat": "samba", "queryType": "range", "refId": "A" }],
+      "title": "Log-Rate", "type": "timeseries"
+    },
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 }, "id": 102, "title": "Details", "type": "row" },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 15 }, "id": 6,
+      "options": { "dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": false, "showCommonLabels": false, "showLabels": true, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
+      "targets": [{ "datasource": { "type": "loki", "uid": "loki" }, "editorMode": "code", "expr": "{job=\"samba\", host=~\"$host\"} |~ \"(?i)(error|warn|failed|denied)\"", "queryType": "range", "refId": "A" }],
+      "title": "Errors & Warnings", "type": "logs"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 15 }, "id": 7,
+      "options": { "dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": false, "showCommonLabels": false, "showLabels": true, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
+      "targets": [{ "datasource": { "type": "loki", "uid": "loki" }, "editorMode": "code", "expr": "{job=\"samba\", host=~\"$host\"} |~ \"(?i)(connect|disconnect|auth|session|share)\"", "queryType": "range", "refId": "A" }],
+      "title": "Access Events", "type": "logs"
+    },
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 }, "id": 103, "title": "Alle Logs", "type": "row" },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 26 }, "id": 8,
+      "options": { "dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": false, "showCommonLabels": false, "showLabels": true, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
+      "targets": [{ "datasource": { "type": "loki", "uid": "loki" }, "editorMode": "code", "expr": "{job=\"samba\", host=~\"$host\"}", "queryType": "range", "refId": "A" }],
+      "title": "Alle Samba Logs", "type": "logs"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["samba", "application"],
+  "templating": {
+    "list": [
+      { "current": { "selected": true, "text": "All", "value": "$__all" }, "datasource": { "type": "loki", "uid": "loki" }, "definition": "label_values({job=\"samba\"}, host)", "hide": 0, "includeAll": true, "label": "Host", "multi": true, "name": "host", "options": [], "query": "label_values({job=\"samba\"}, host)", "refresh": 2, "regex": "", "skipUrlSync": false, "sort": 1, "type": "query" }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Samba",
+  "uid": "samba-logs",
+  "version": 0,
+  "weekStart": ""
+}

@@ -1,0 +1,44 @@
+---
+# Cloudflared Tunnel Deployment Tasks
+
+- name: Create Cloudflared installation directory
+  ansible.builtin.file:
+    path: "{{ cloudflared_install_path }}"
+    state: directory
+    mode: '0755'
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ cloudflared_install_path }}/docker-compose.yml"
+    mode: '0644'
+  notify: Restart Cloudflared stack
+
+- name: Deploy environment file
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ cloudflared_install_path }}/.env"
+    mode: '0600'
+  no_log: true
+  notify: Restart Cloudflared stack
+
+- name: Start Cloudflared Docker Compose stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ cloudflared_install_path }}"
+    state: present
+    pull: missing
+
+- name: Deploy update script
+  ansible.builtin.template:
+    src: update.sh.j2
+    dest: "{{ cloudflared_install_path }}/update.sh"
+    mode: '0755'
+
+- name: Setup weekly container update cron job
+  ansible.builtin.cron:
+    name: "Cloudflared Container Update"
+    minute: "0"
+    hour: "0"
+    weekday: "0"
+    job: "{{ cloudflared_install_path }}/update.sh"
+    user: root

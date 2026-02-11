@@ -1,0 +1,8 @@
+---
+# Logging Stack Deployment Playbook (Loki + Grafana)
+# Voraussetzung: Baseline-Playbook wurde bereits ausgeführt (Docker installiert)
+
+- name: Deploy Logging Stack (Loki + Grafana)
+  hosts: chronicle
+  roles:
+    - logging

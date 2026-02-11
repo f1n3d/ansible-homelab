@@ -1,0 +1,100 @@
+---
+# Website (Nginx) Deployment Tasks
+
+# Postfix (send-only mail server)
+- name: Include Postfix tasks
+  ansible.builtin.include_tasks: postfix.yml
+  when: postfix_enabled | default(true)
+
+# Contact API (Flask + Gunicorn)
+- name: Include Contact API tasks
+  ansible.builtin.include_tasks: contact-api.yml
+  when: contact_api_enabled | default(true)
+
+# Website (Nginx in Docker)
+- name: Create installation directory
+  ansible.builtin.file:
+    path: "{{ website_install_path }}"
+    state: directory
+    mode: "0755"
+
+- name: Create HTML content directory
+  ansible.builtin.file:
+    path: "{{ website_html_path }}"
+    state: directory
+    mode: "0755"
+
+- name: Ensure all web files are readable by nginx (HTML, JS, CSS, etc.)
+  ansible.builtin.file:
+    path: "{{ website_html_path }}"
+    state: directory
+    recurse: yes
+    mode: "u=rwX,g=rX,o=rX"
+
+- name: Check if index.html exists
+  ansible.builtin.stat:
+    path: "{{ website_html_path }}/index.html"
+  register: index_html
+
+- name: Create placeholder index.html if no content exists
+  ansible.builtin.copy:
+    dest: "{{ website_html_path }}/index.html"
+    content: |
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>{{ website_domain }}</title>
+      </head>
+      <body>
+          <h1>{{ website_domain }}</h1>
+          <p>Replace this file at {{ website_html_path }}/index.html with your content.</p>
+      </body>
+      </html>
+    mode: "0644"
+  when: not index_html.stat.exists
+
+- name: Deploy nginx.conf
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: "{{ website_install_path }}/nginx.conf"
+    mode: "0644"
+  notify: Restart Website stack
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ website_install_path }}/docker-compose.yml"
+    mode: "0644"
+  notify: Restart Website stack
+
+- name: Start Website Docker Compose stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ website_install_path }}"
+    state: present
+    pull: missing
+  register: compose_result
+
+- name: Wait for Nginx container to be running
+  community.docker.docker_container_info:
+    name: "{{ website_container_name }}"
+  register: website_container
+  until: website_container.container.State.Running | default(false)
+  retries: 12
+  delay: 5
+
+- name: Deploy update script
+  ansible.builtin.template:
+    src: update.sh.j2
+    dest: "{{ website_install_path }}/update.sh"
+    mode: "0755"
+
+- name: Setup weekly container update cron job
+  ansible.builtin.cron:
+    name: "Website Nginx Container Update"
+    minute: "0"
+    hour: "0"
+    weekday: "0"
+    job: "{{ website_install_path }}/update.sh"
+    user: root

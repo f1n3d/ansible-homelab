@@ -1,0 +1,6 @@
+---
+# Cloudflared Tunnel Secrets
+# Copy to vault.yml and encrypt: ansible-vault encrypt vault.yml
+
+# Tunnel Token (from Cloudflare Zero Trust dashboard)
+cloudflared_tunnel_token: "CHANGE_ME"

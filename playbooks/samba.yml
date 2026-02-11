@@ -1,0 +1,16 @@
+---
+# Samba Server Deployment Playbook
+# Deploys Samba via Docker in an unprivileged LXC container
+#
+# Usage:
+#   ansible-playbook playbooks/samba.yml
+#
+# Requirements:
+#   - Target must have Docker installed
+#   - /mnt/storage must be mounted (via Proxmox LXC mapping)
+#   - inventory/group_vars/samba/vault.yml must contain samba_password
+
+- name: Deploy Samba Server
+  hosts: samba
+  roles:
+    - samba

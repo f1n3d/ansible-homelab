@@ -1,0 +1,116 @@
+---
+# =============================================================================
+# Logging Role - Default Variables
+# =============================================================================
+# Diese Variablen können in group_vars oder host_vars überschrieben werden
+
+# =============================================================================
+# Docker Images (Versions werden automatisch via GitHub API ermittelt)
+# =============================================================================
+# Diese Werte sind Fallback-Versionen, falls GitHub API nicht erreichbar ist
+loki_image_base: grafana/loki
+loki_fallback_version: "3.0.0"
+
+grafana_image_base: grafana/grafana
+grafana_fallback_version: "11.0.0"
+
+# =============================================================================
+# Installation Paths
+# =============================================================================
+logging_install_path: /opt/logging
+loki_data_path: "{{ logging_install_path }}/loki"
+grafana_data_path: "{{ logging_install_path }}/grafana"
+
+# =============================================================================
+# Loki Configuration
+# =============================================================================
+loki_http_port: 3100
+loki_grpc_port: 9096
+loki_retention_period: 720h  # 30 Tage
+loki_log_level: warn
+
+# Loki Limits (Performance-Tuning)
+loki_ingestion_rate_mb: 16
+loki_ingestion_burst_size_mb: 32
+loki_per_stream_rate_limit: 8MB
+loki_per_stream_rate_limit_burst: 16MB
+loki_max_entries_limit_per_query: 10000
+loki_reject_old_samples_max_age: 168h  # 7 Tage
+
+# Loki Compactor
+loki_retention_enabled: true
+loki_retention_delete_delay: 2h
+loki_retention_delete_worker_count: 150
+
+# =============================================================================
+# Grafana Configuration
+# =============================================================================
+grafana_http_port: 3000
+grafana_allow_signup: false
+grafana_disable_gravatar: true
+grafana_serve_from_subpath: false
+grafana_disable_login_form: false  # Lokaler Admin-Login bleibt aktiv
+
+# Analytics
+grafana_reporting_enabled: false
+grafana_check_for_updates: false
+
+# =============================================================================
+# OIDC Configuration (Authentik)
+# =============================================================================
+grafana_oidc_enabled: true
+grafana_oidc_name: "Authentik"
+grafana_oidc_allow_signup: true
+grafana_oidc_scopes: "openid profile email"
+grafana_oidc_auth_url: "https://auth.example.com/application/o/authorize/"
+grafana_oidc_token_url: "https://auth.example.com/application/o/token/"
+grafana_oidc_api_url: "https://auth.example.com/application/o/userinfo/"
+grafana_oidc_role_attribute_path: "contains(groups[*], 'Grafana Admins') && 'Admin' || 'Viewer'"
+
+# OIDC Credentials (werden aus vault.yml geladen):
+# grafana_oidc_client_id: "<aus-vault>"
+# grafana_oidc_client_secret: "<aus-vault>"
+# grafana_oidc_issuer: "<aus-vault>"
+
+# =============================================================================
+# Grafana Admin Account (Fallback, aus vault.yml)
+# =============================================================================
+# grafana_admin_user: "<aus-vault>"
+# grafana_admin_password: "<aus-vault>"
+# grafana_domain: "<aus-vault>"
+
+# =============================================================================
+# Resource Limits (Docker)
+# =============================================================================
+loki_memory_limit: 2G
+loki_cpu_limit: "1.0"
+
+grafana_memory_limit: 1G
+grafana_cpu_limit: "1.0"
+
+# =============================================================================
+# Auto-Update Configuration
+# =============================================================================
+logging_update_enabled: true
+logging_update_weekday: "0"  # Sonntag
+logging_update_hour: "1"
+logging_update_minute: "0"
+
+# =============================================================================
+# Dashboard Provisioning
+# =============================================================================
+logging_provision_dashboards: true
+
+# Dashboard-Liste (wird automatisch deployed)
+logging_dashboards:
+  - system-overview
+  - auth-security
+  - docker-logs
+  - application-errors
+  - critical-errors
+  - paperless
+  - authentik
+  - docmost
+  - website
+  - samba
+  - cloudflared

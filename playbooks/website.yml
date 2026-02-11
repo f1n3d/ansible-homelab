@@ -1,0 +1,19 @@
+---
+# Website (Nginx) Deployment Playbook
+# Deploys an Nginx web server for static content via Docker
+# Includes Contact-API (Flask) and Postfix (send-only) for DSGVO-compliant contact form
+#
+# Voraussetzung: Baseline-Playbook wurde bereits ausgeführt (Docker installiert)
+#
+# Usage:
+#   ansible-playbook playbooks/website.yml
+#
+# Requirements:
+#   - Target must have Docker installed (baseline.yml)
+#   - Place static HTML files in /opt/website/html/ on the target host
+#   - inventory/group_vars/website/vault.yml must contain postfix_sasl_password
+
+- name: Deploy Website (Nginx)
+  hosts: website
+  roles:
+    - website

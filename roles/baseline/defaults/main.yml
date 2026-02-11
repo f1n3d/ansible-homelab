@@ -1,0 +1,12 @@
+---
+# =============================================================================
+# Baseline Role - Default Variables
+# =============================================================================
+
+# Grafana Alloy Configuration
+alloy_image: "grafana/alloy:latest"
+alloy_http_port: 12345
+alloy_install_path: "/opt/alloy"
+
+# Loki Push Endpoint (defined in inventory/group_vars/all.yml)
+# loki_push_endpoint: "{{ loki_url }}/loki/api/v1/push"

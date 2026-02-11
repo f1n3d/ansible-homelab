@@ -1,0 +1,78 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Docmost Container Update Script
+# Mit PostgreSQL-Backup und Graceful Shutdown
+
+set -e
+
+INSTALL_PATH="{{ docmost_install_path }}"
+BACKUP_DIR="{{ docmost_install_path }}/backups"
+LOGFILE="{{ docmost_install_path }}/update.log"
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_RETENTION_DAYS=7
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOGFILE"
+}
+
+log "=== Starting Docmost update ==="
+
+cd "$INSTALL_PATH"
+
+# Backup-Verzeichnis erstellen falls nicht vorhanden
+mkdir -p "$BACKUP_DIR"
+
+# 1. PostgreSQL Backup erstellen
+log "Creating PostgreSQL backup..."
+if docker compose exec -T db pg_dump -U {{ docmost_postgres_user }} {{ docmost_postgres_db }} > "$BACKUP_DIR/docmost_db_$DATE.sql" 2>/dev/null; then
+    gzip "$BACKUP_DIR/docmost_db_$DATE.sql"
+    log "Database backup created: docmost_db_$DATE.sql.gz"
+else
+    log "WARNING: Database backup failed, but continuing with update..."
+fi
+
+# 2. Alte Backups aufräumen (älter als BACKUP_RETENTION_DAYS Tage)
+log "Cleaning up old backups..."
+find "$BACKUP_DIR" -name "docmost_db_*.sql.gz" -mtime +$BACKUP_RETENTION_DAYS -delete 2>/dev/null || true
+
+# 3. Neue Images pullen (bevor wir stoppen, um Downtime zu minimieren)
+log "Pulling new Docker images..."
+docker compose pull
+
+# 4. Graceful Shutdown der Services
+log "Stopping services gracefully..."
+# Erst Applikation stoppen, dann Redis, dann Datenbank
+docker compose stop docmost || true
+docker compose stop redis || true
+docker compose stop db || true
+
+# 5. Kurz warten, damit alle Prozesse sauber beendet werden
+sleep 5
+
+# 6. Alle Container neu starten
+log "Starting updated containers..."
+docker compose up -d --remove-orphans
+
+# 7. Warten auf Health-Check
+log "Waiting for services to become healthy..."
+RETRIES=30
+COUNT=0
+while [ $COUNT -lt $RETRIES ]; do
+    if curl -sf "http://localhost:{{ docmost_port }}" > /dev/null 2>&1; then
+        log "Docmost is healthy and responding"
+        break
+    fi
+    COUNT=$((COUNT + 1))
+    log "Waiting for Docmost to start... ($COUNT/$RETRIES)"
+    sleep 10
+done
+
+if [ $COUNT -eq $RETRIES ]; then
+    log "WARNING: Docmost health check timed out after $((RETRIES * 10)) seconds"
+fi
+
+# 8. Aufräumen alter Docker Images
+log "Cleaning up unused Docker images..."
+docker image prune -f > /dev/null 2>&1 || true
+
+log "=== Docmost update completed ==="

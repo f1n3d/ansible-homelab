@@ -1,0 +1,8 @@
+---
+# Cloudflared Handlers
+
+- name: Restart Cloudflared stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ cloudflared_install_path }}"
+    state: present
+    pull: missing

@@ -1,0 +1,14 @@
+---
+# Authentik Identity Provider Deployment Playbook
+# Deploys Authentik with PostgreSQL and Redis
+#
+# Prerequisites:
+#   - baseline.yml must have been run on the host first (installs Docker)
+#
+# Usage:
+#   ansible-playbook playbooks/authentik.yml
+
+- name: Deploy Authentik Identity Provider
+  hosts: authentik
+  roles:
+    - authentik

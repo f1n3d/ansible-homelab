@@ -1,0 +1,14 @@
+---
+# Paperless-NGX Deployment Playbook
+# Deploys Paperless-NGX with PostgreSQL, Redis, Tika & Gotenberg
+#
+# Prerequisites:
+#   - baseline.yml must have been run on the host first (installs Docker)
+#
+# Usage:
+#   ansible-playbook playbooks/paperless.yml
+
+- name: Deploy Paperless-NGX
+  hosts: paperless
+  roles:
+    - paperless

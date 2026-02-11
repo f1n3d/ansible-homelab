@@ -1,0 +1,101 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Authentik Container Update Script
+# Mit PostgreSQL-Backup, Graceful Shutdown und automatischer Version-Erkennung
+
+set -e
+
+INSTALL_PATH="{{ authentik_install_path }}"
+BACKUP_DIR="{{ authentik_install_path }}/backups"
+LOGFILE="{{ authentik_install_path }}/update.log"
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_RETENTION_DAYS=7
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOGFILE"
+}
+
+log "=== Starting Authentik update ==="
+
+cd "$INSTALL_PATH"
+
+# Backup-Verzeichnis erstellen falls nicht vorhanden
+mkdir -p "$BACKUP_DIR"
+
+# 1. Neueste Authentik-Version von GitHub Releases ermitteln
+log "Fetching latest Authentik version from GitHub..."
+LATEST_VERSION=$(curl -s https://api.github.com/repos/goauthentik/authentik/releases/latest | grep '"tag_name"' | sed -E 's/.*"tag_name": "version\/([^"]+)".*/\1/')
+
+if [ -z "$LATEST_VERSION" ]; then
+    log "ERROR: Could not fetch latest version from GitHub. Using current version."
+else
+    log "Latest Authentik version: $LATEST_VERSION"
+
+    # Aktuelle Version aus docker-compose.yml auslesen
+    CURRENT_VERSION=$(grep 'image: ghcr.io/goauthentik/server:' docker-compose.yml | head -1 | sed -E 's/.*:([0-9.]+).*/\1/')
+    log "Current Authentik version: $CURRENT_VERSION"
+
+    if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
+        log "Updating docker-compose.yml to version $LATEST_VERSION..."
+        sed -i.bak "s|ghcr.io/goauthentik/server:[0-9.]*|ghcr.io/goauthentik/server:$LATEST_VERSION|g" docker-compose.yml
+        log "Version updated in docker-compose.yml"
+    else
+        log "Already on latest version $LATEST_VERSION"
+    fi
+fi
+
+# 2. PostgreSQL Backup erstellen
+log "Creating PostgreSQL backup..."
+if docker compose exec -T postgresql pg_dump -U {{ authentik_postgres_user }} {{ authentik_postgres_db }} > "$BACKUP_DIR/authentik_db_$DATE.sql" 2>/dev/null; then
+    gzip "$BACKUP_DIR/authentik_db_$DATE.sql"
+    log "Database backup created: authentik_db_$DATE.sql.gz"
+else
+    log "WARNING: Database backup failed, but continuing with update..."
+fi
+
+# 3. Alte Backups aufräumen (älter als BACKUP_RETENTION_DAYS Tage)
+log "Cleaning up old backups..."
+find "$BACKUP_DIR" -name "authentik_db_*.sql.gz" -mtime +$BACKUP_RETENTION_DAYS -delete 2>/dev/null || true
+
+# 4. Neue Images pullen (bevor wir stoppen, um Downtime zu minimieren)
+log "Pulling new Docker images..."
+docker compose pull
+
+# 5. Graceful Shutdown der Services
+log "Stopping services gracefully..."
+# Erst Server stoppen, dann Worker, dann Redis, dann Datenbank
+docker compose stop server || true
+docker compose stop worker || true
+docker compose stop redis || true
+docker compose stop postgresql || true
+
+# 6. Kurz warten, damit alle Prozesse sauber beendet werden
+sleep 5
+
+# 7. Alle Container neu starten
+log "Starting updated containers..."
+docker compose up -d --remove-orphans
+
+# 8. Warten auf Health-Check
+log "Waiting for services to become healthy..."
+RETRIES=30
+COUNT=0
+while [ $COUNT -lt $RETRIES ]; do
+    if curl -sf "http://localhost:{{ authentik_port }}" > /dev/null 2>&1; then
+        log "Authentik is healthy and responding"
+        break
+    fi
+    COUNT=$((COUNT + 1))
+    log "Waiting for Authentik to start... ($COUNT/$RETRIES)"
+    sleep 10
+done
+
+if [ $COUNT -eq $RETRIES ]; then
+    log "WARNING: Authentik health check timed out after $((RETRIES * 10)) seconds"
+fi
+
+# 9. Aufräumen alter Docker Images
+log "Cleaning up unused Docker images..."
+docker image prune -f > /dev/null 2>&1 || true
+
+log "=== Authentik update completed (Version: $LATEST_VERSION) ==="

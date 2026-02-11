@@ -1,0 +1,63 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Website (Nginx) Container Update Script
+
+set -e
+
+INSTALL_PATH="{{ website_install_path }}"
+LOGFILE="{{ website_install_path }}/update.log"
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOGFILE"
+}
+
+log "=== Starting Website (Nginx) update ==="
+
+cd "$INSTALL_PATH"
+
+# 1. Neue Images pullen (vor dem Stoppen, um Downtime zu minimieren)
+log "Pulling new Docker images..."
+docker compose pull
+
+# 2. Container mit neuem Image neu starten
+log "Restarting containers..."
+docker compose up -d --remove-orphans
+
+# 3. Health-Check Nginx
+log "Waiting for Nginx to respond..."
+RETRIES=12
+COUNT=0
+while [ $COUNT -lt $RETRIES ]; do
+    if curl -sf "http://localhost:{{ website_port }}" > /dev/null 2>&1; then
+        log "Nginx is healthy and responding"
+        break
+    fi
+    COUNT=$((COUNT + 1))
+    log "Waiting for Nginx to start... ($COUNT/$RETRIES)"
+    sleep 5
+done
+
+if [ $COUNT -eq $RETRIES ]; then
+    log "WARNING: Nginx health check timed out after $((RETRIES * 5)) seconds"
+fi
+
+{% if contact_api_enabled | default(true) %}
+# 4. Restart Contact API service
+log "Restarting Contact API service..."
+systemctl restart contact-api || log "WARNING: Failed to restart contact-api"
+
+# 5. Health-Check Contact API
+log "Checking Contact API health..."
+sleep 2
+if curl -sf "http://localhost:{{ contact_api_port }}/api/contact" > /dev/null 2>&1; then
+    log "Contact API is healthy and responding"
+else
+    log "WARNING: Contact API health check failed"
+fi
+{% endif %}
+
+# 6. Alte Docker Images aufräumen
+log "Cleaning up unused Docker images..."
+docker image prune -f > /dev/null 2>&1 || true
+
+log "=== Website (Nginx) update completed ==="

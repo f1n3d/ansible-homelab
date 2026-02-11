@@ -1,0 +1,23 @@
+---
+# Samba Server Default Configuration
+# Override these values in vars/samba_secrets.yml or playbook vars
+
+# Installation
+samba_install_path: /opt/samba
+
+# Docker Image
+samba_image: ghcr.io/servercontainers/samba:latest
+
+# SMB User (password should be in vault)
+samba_user: "smbuser"
+# samba_password: defined in secrets (vault_samba_password)
+
+# Share Configuration
+samba_share_name: "storage"
+samba_host_path: "/mnt/storage"
+samba_container_path: "/shares/storage"
+
+# UID/GID for file access (must match host storage permissions)
+samba_uid: 1100
+samba_gid: 1100
+samba_group: "samba"

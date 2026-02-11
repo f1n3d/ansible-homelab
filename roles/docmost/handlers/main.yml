@@ -1,0 +1,8 @@
+---
+# Docmost Handlers
+
+- name: Restart Docmost Stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ docmost_install_path }}"
+    state: present
+    pull: missing

@@ -1,0 +1,36 @@
+---
+# Website Server Default Configuration
+
+# Installation
+website_install_path: /opt/website
+
+# Docker Image
+website_image: nginx:alpine
+
+# Container Name
+website_container_name: nginx
+
+# Port (HTTP only - Cloudflare tunnel handles TLS)
+website_port: 80
+
+# Static files directory on host
+website_html_path: "{{ website_install_path }}/html"
+
+# Domain
+website_domain: www.example.com
+
+# Contact API
+contact_api_enabled: true
+contact_api_install_path: /opt/contact-api
+contact_api_port: 5000
+contact_api_rate_limit: "5/minute"
+contact_api_recipient: "contact@example.com"
+contact_api_sender: "sender@example.com"
+
+# Postfix (send-only via SMTP Relay)
+postfix_enabled: true
+postfix_hostname: "{{ website_domain }}"
+postfix_relay_host: "[smtp.example.com]:587"
+postfix_sasl_user: "sender@example.com"
+# postfix_sasl_password: defined in inventory/group_vars/website/vault.yml
+postfix_sender_address: "sender@example.com"

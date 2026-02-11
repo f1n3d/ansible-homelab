@@ -1,0 +1,25 @@
+---
+# Master-Playbook: Deployed alle Container-Services
+#
+# Reihenfolge:
+# 1. Infrastruktur-Services (Samba, Cloudflared, Authentik)
+# 2. Anwendungen (Paperless, Docmost)
+# 3. Website
+
+- name: Deploy Samba file server
+  ansible.builtin.import_playbook: samba.yml
+
+- name: Deploy Cloudflare Tunnel
+  ansible.builtin.import_playbook: cloudflared.yml
+
+- name: Deploy Authentik Identity Provider
+  ansible.builtin.import_playbook: authentik.yml
+
+- name: Deploy Paperless-NGX
+  ansible.builtin.import_playbook: paperless.yml
+
+- name: Deploy Docmost
+  ansible.builtin.import_playbook: docmost.yml
+
+- name: Deploy Website
+  ansible.builtin.import_playbook: website.yml

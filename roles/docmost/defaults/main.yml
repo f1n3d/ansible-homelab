@@ -1,0 +1,40 @@
+---
+# Defaults für Docmost Role
+# Diese Werte können in vars/docmost_secrets.yml oder im Playbook überschrieben werden
+
+# Installationspfad
+docmost_install_path: /opt/docmost
+
+# Container Images
+docmost_image: docmost/docmost:latest
+docmost_postgres_image: postgres:16-alpine
+docmost_redis_image: redis:7.2-alpine
+
+# Port (nur lokal, da Cloudflare Tunnel)
+docmost_port: 3000
+
+# Datenbank Defaults
+docmost_postgres_db: docmost
+docmost_postgres_user: docmost
+
+# Redis
+docmost_redis_url: redis://redis:6379
+
+# Storage
+docmost_storage_driver: local
+docmost_file_upload_size_limit: 250mb
+
+# JWT
+docmost_jwt_expires_in: 30d
+
+# Draw.io Integration
+docmost_drawio_url: https://embed.diagrams.net
+
+# Telemetrie
+docmost_disable_telemetry: "false"
+
+# SMTP Defaults (werden typischerweise überschrieben)
+docmost_mail_driver: smtp
+docmost_smtp_port: 465
+docmost_smtp_secure: "true"
+

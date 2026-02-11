@@ -1,0 +1,23 @@
+services:
+  alloy:
+    image: {{ alloy_image }}
+    container_name: alloy
+    restart: unless-stopped
+
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy:ro
+      - /var/lib/alloy:/var/lib/alloy
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log/journal:/var/log/journal:ro
+
+    command: run --storage.path=/var/lib/alloy --server.http.listen-addr=0.0.0.0:{{ alloy_http_port }} /etc/alloy/config.alloy
+
+    ports:
+      - "{{ alloy_http_port }}:{{ alloy_http_port }}"
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

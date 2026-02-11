@@ -1,0 +1,71 @@
+---
+# Docmost Deployment Tasks
+
+- name: Installationsverzeichnis erstellen
+  ansible.builtin.file:
+    path: "{{ docmost_install_path }}"
+    state: directory
+    mode: '0755'
+
+- name: Docker Volumes erstellen
+  community.docker.docker_volume:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - docmost_docmost_data
+    - docmost_db_data
+    - docmost_redis_data
+
+- name: docker-compose.yml deployen
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ docmost_install_path }}/docker-compose.yml"
+    mode: '0644'
+  notify: Restart Docmost Stack
+
+- name: .env Datei deployen
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ docmost_install_path }}/.env"
+    mode: '0600'  # Nur root lesbar wegen Passwörtern
+  notify: Restart Docmost Stack
+  no_log: true  # Verhindert, dass Secrets im Log erscheinen
+
+- name: Docker Compose Stack starten
+  community.docker.docker_compose_v2:
+    project_src: "{{ docmost_install_path }}"
+    state: present
+    pull: missing
+  register: docmost_compose_result
+
+- name: Warten bis Docmost Container healthy ist
+  ansible.builtin.uri:
+    url: "http://localhost:{{ docmost_port }}"
+    method: GET
+    status_code: [200, 302]
+  register: healthcheck
+  until: healthcheck.status in [200, 302]
+  retries: 30
+  delay: 5
+  ignore_errors: true
+
+- name: Backup-Verzeichnis erstellen
+  ansible.builtin.file:
+    path: "{{ docmost_install_path }}/backups"
+    state: directory
+    mode: "0755"
+
+- name: Update-Script deployen
+  ansible.builtin.template:
+    src: update.sh.j2
+    dest: "{{ docmost_install_path }}/update.sh"
+    mode: "0755"
+
+- name: Cronjob für wöchentliches Container-Update einrichten
+  ansible.builtin.cron:
+    name: "Docmost Container Update"
+    minute: "0"
+    hour: "0"
+    weekday: "0"
+    job: "{{ docmost_install_path }}/update.sh"
+    user: root

@@ -1,0 +1,6 @@
+---
+# Website / Postfix Secrets
+# Copy to vault.yml and encrypt: ansible-vault encrypt vault.yml
+
+# Postfix SMTP Relay Password
+postfix_sasl_password: "CHANGE_ME"

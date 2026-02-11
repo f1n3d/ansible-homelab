@@ -1,0 +1,64 @@
+---
+# Samba Server Deployment Tasks
+
+- name: Check if storage mount point exists
+  ansible.builtin.stat:
+    path: "{{ samba_host_path }}"
+  register: storage_mount
+
+- name: Fail if storage mount point does not exist
+  ansible.builtin.fail:
+    msg: "Storage mount point {{ samba_host_path }} does not exist. Please ensure the Proxmox LXC mount is configured correctly."
+  when: not storage_mount.stat.exists
+
+- name: Ensure storage directory has correct ownership for Samba access
+  ansible.builtin.file:
+    path: "{{ samba_host_path }}"
+    owner: "{{ samba_uid }}"
+    group: "{{ samba_gid }}"
+    mode: "0775"
+    recurse: yes
+
+- name: Create Samba installation directory
+  ansible.builtin.file:
+    path: "{{ samba_install_path }}"
+    state: directory
+    mode: "0755"
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ samba_install_path }}/docker-compose.yml"
+    mode: "0600"
+  no_log: true
+  notify: Restart Samba stack
+
+- name: Start Samba Docker Compose stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ samba_install_path }}"
+    state: present
+    pull: missing
+  register: compose_result
+
+- name: Wait for Samba container to be running
+  community.docker.docker_container_info:
+    name: samba
+  register: samba_container
+  until: samba_container.container.State.Running | default(false)
+  retries: 12
+  delay: 5
+
+- name: Deploy update script
+  ansible.builtin.template:
+    src: update.sh.j2
+    dest: "{{ samba_install_path }}/update.sh"
+    mode: '0755'
+
+- name: Setup weekly container update cron job
+  ansible.builtin.cron:
+    name: "Update Samba Docker container"
+    minute: "0"
+    hour: "0"
+    weekday: "0"
+    job: "{{ samba_install_path }}/update.sh"
+    user: root

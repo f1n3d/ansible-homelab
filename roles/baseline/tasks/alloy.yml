@@ -1,0 +1,49 @@
+---
+# =============================================================================
+# Grafana Alloy Deployment Tasks
+# =============================================================================
+# Deploy Grafana Alloy for log shipping to Loki
+#
+# Alloy is the official successor of Promtail (deprecated, EOL Feb 2026)
+# and provides better architecture and active development.
+
+- name: Create Alloy directory
+  ansible.builtin.file:
+    path: "{{ alloy_install_path }}"
+    state: directory
+    mode: '0755'
+
+- name: Deploy Alloy configuration
+  ansible.builtin.template:
+    src: alloy-config.alloy.j2
+    dest: "{{ alloy_install_path }}/config.alloy"
+    mode: '0644'
+  notify: Restart Alloy
+
+- name: Deploy Alloy Docker Compose
+  ansible.builtin.template:
+    src: docker-compose-alloy.yml.j2
+    dest: "{{ alloy_install_path }}/docker-compose.yml"
+    mode: '0644'
+
+- name: Create Alloy storage directory
+  ansible.builtin.file:
+    path: /var/lib/alloy
+    state: directory
+    mode: '0755'
+
+- name: Start Alloy container
+  community.docker.docker_compose_v2:
+    project_src: "{{ alloy_install_path }}"
+    state: present
+    pull: missing
+
+- name: Wait for Alloy to be healthy
+  ansible.builtin.uri:
+    url: "http://localhost:{{ alloy_http_port }}/-/healthy"
+    status_code: 200
+  register: alloy_health
+  until: alloy_health.status == 200
+  retries: 12
+  delay: 5
+  ignore_errors: true

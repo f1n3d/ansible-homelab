@@ -1,0 +1,8 @@
+---
+# Cloudflared Tunnel Deployment Playbook
+# Voraussetzung: Baseline-Playbook wurde bereits ausgeführt (Docker installiert)
+
+- name: Deploy Cloudflared Tunnel
+  hosts: cloudflared
+  roles:
+    - cloudflared

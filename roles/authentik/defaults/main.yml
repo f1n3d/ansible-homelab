@@ -1,0 +1,42 @@
+---
+# Authentik Identity Provider Default Configuration
+# Override these values in vars/authentik_secrets.yml or playbook vars
+
+# Installation
+authentik_install_path: /opt/authentik
+
+# Docker Images
+authentik_image: ghcr.io/goauthentik/server:2025.12.2
+authentik_postgres_image: postgres:16-alpine
+authentik_redis_image: redis:7.2-alpine
+
+# Network/Service
+authentik_port: 9000
+
+# Domain (for error reporting and email links)
+authentik_domain: auth.example.com
+
+# Database
+authentik_postgres_db: authentik
+authentik_postgres_user: authentik
+# authentik_postgres_password: defined in secrets
+
+# Secret Key (for session encryption - generate with: openssl rand -base64 50)
+# authentik_secret_key: defined in secrets
+
+# Error Reporting (disabled by default for privacy)
+authentik_error_reporting_enabled: "false"
+authentik_error_reporting_environment: "production"
+authentik_error_reporting_send_pii: "false"
+
+# Logging
+authentik_log_level: warning
+
+# SMTP Configuration (optional, for email notifications)
+# authentik_smtp_host: defined in secrets
+# authentik_smtp_port: 465
+# authentik_smtp_username: defined in secrets
+# authentik_smtp_password: defined in secrets
+# authentik_smtp_use_tls: true
+# authentik_smtp_use_ssl: true
+# authentik_email_from: authentik@example.org

@@ -1,0 +1,122 @@
+# {{ ansible_managed }}
+# Contact Form API - DSGVO-konform, keine Datenspeicherung
+
+import re
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from flask import Flask, request, jsonify
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+app = Flask(__name__)
+
+# Rate Limiting: {{ contact_api_rate_limit }} pro IP
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["{{ contact_api_rate_limit }}"],
+    storage_uri="memory://",
+)
+
+# Configuration
+RECIPIENT = "{{ contact_api_recipient }}"
+SENDER = "{{ contact_api_sender }}"
+ALLOWED_ORIGIN = "https://{{ website_domain }}"
+
+# Email regex pattern
+EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+
+
+def validate_origin(origin):
+    """Validate Origin header for CSRF protection."""
+    if not origin:
+        return False
+    return origin == ALLOWED_ORIGIN or origin == ALLOWED_ORIGIN.replace('www.', '')
+
+
+def validate_email(email):
+    """Validate email format."""
+    if not email or len(email) > 254:
+        return False
+    return EMAIL_REGEX.match(email) is not None
+
+
+def sanitize_input(text, max_length=2000):
+    """Sanitize and limit input text."""
+    if not text:
+        return ""
+    # Remove null bytes and limit length
+    text = text.replace('\x00', '').strip()
+    return text[:max_length]
+
+
+def send_email(email, interest, message):
+    """Send email via local Postfix."""
+    msg = MIMEMultipart()
+    msg['From'] = SENDER
+    msg['To'] = RECIPIENT
+    msg['Subject'] = f"Kontaktanfrage: {interest}"
+
+    body = f"""Neue Kontaktanfrage über {{ website_domain }}
+
+E-Mail: {email}
+Interesse: {interest}
+
+Nachricht:
+{message}
+
+---
+Diese Nachricht wurde automatisch versendet.
+"""
+    msg.attach(MIMEText(body, 'plain', 'utf-8'))
+
+    with smtplib.SMTP('localhost', 25) as server:
+        server.send_message(msg)
+
+
+@app.route('/api/contact', methods=['POST'])
+@limiter.limit("{{ contact_api_rate_limit }}")
+def contact():
+    # CSRF protection via Origin header
+    origin = request.headers.get('Origin')
+    if not validate_origin(origin):
+        return jsonify({'error': 'Invalid origin'}), 403
+
+    # Honeypot check
+    honeypot = request.form.get('_honey', '')
+    if honeypot:
+        # Bot detected - silently accept but don't send
+        return jsonify({'success': True, 'message': 'Nachricht gesendet'})
+
+    # Get and validate input
+    email = sanitize_input(request.form.get('email', ''), 254)
+    interest = sanitize_input(request.form.get('interest', 'Sonstiges'), 100)
+    message = sanitize_input(request.form.get('message', ''), 2000)
+
+    # Validate required fields
+    if not email:
+        return jsonify({'error': 'E-Mail-Adresse erforderlich'}), 400
+
+    if not validate_email(email):
+        return jsonify({'error': 'Ungültige E-Mail-Adresse'}), 400
+
+    if not message or len(message) < 10:
+        return jsonify({'error': 'Nachricht zu kurz (min. 10 Zeichen)'}), 400
+
+    # Send email
+    try:
+        send_email(email, interest, message)
+        return jsonify({'success': True, 'message': 'Nachricht erfolgreich gesendet'})
+    except Exception:
+        return jsonify({'error': 'Fehler beim Senden'}), 500
+
+
+@app.route('/api/contact', methods=['GET'])
+def contact_info():
+    """Health check endpoint."""
+    return jsonify({'status': 'ok', 'service': 'contact-api'})
+
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port={{ contact_api_port }}, debug=False)

@@ -1,0 +1,58 @@
+# {{ ansible_managed }}
+# Paperless-NGX Docker Compose Configuration
+# With PostgreSQL, Redis, Tika & Gotenberg for Office document support
+
+services:
+  broker:
+    image: {{ paperless_redis_image }}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    volumes:
+      - paperless_redis_data:/data
+
+  db:
+    image: {{ paperless_postgres_image }}
+    restart: unless-stopped
+    stop_grace_period: 60s
+    volumes:
+      - paperless_db_data:/var/lib/postgresql
+    env_file: .env
+
+  webserver:
+    image: {{ paperless_image }}
+    restart: unless-stopped
+    depends_on:
+      - db
+      - broker
+      - gotenberg
+      - tika
+    ports:
+      - "{{ paperless_port }}:8000"
+    volumes:
+      - paperless_data:/usr/src/paperless/data
+      - paperless_media:/usr/src/paperless/media
+      - {{ paperless_install_path }}/export:/usr/src/paperless/export
+      - {{ paperless_install_path }}/consume:/usr/src/paperless/consume
+    env_file: .env
+
+  gotenberg:
+    image: {{ paperless_gotenberg_image }}
+    restart: unless-stopped
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=true"
+      - "--chromium-allow-list=file:///tmp/.*"
+
+  tika:
+    image: {{ paperless_tika_image }}
+    restart: unless-stopped
+
+volumes:
+  paperless_data:
+    external: true
+  paperless_media:
+    external: true
+  paperless_db_data:
+    external: true
+  paperless_redis_data:
+    external: true

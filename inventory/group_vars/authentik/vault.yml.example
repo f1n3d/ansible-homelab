@@ -1,0 +1,16 @@
+---
+# Authentik Identity Provider Secrets
+# Copy to vault.yml and encrypt: ansible-vault encrypt vault.yml
+
+# Database
+authentik_postgres_password: "CHANGE_ME"
+
+# Application Secret (generate with: openssl rand -base64 50)
+authentik_secret_key: "CHANGE_ME"
+
+# SMTP Configuration (optional - for email notifications)
+# Uncomment and fill in to enable email sending
+# authentik_smtp_host: "smtp.example.com"
+# authentik_smtp_username: "user@example.com"
+# authentik_smtp_password: "CHANGE_ME"
+# authentik_email_from: "authentik@example.com"

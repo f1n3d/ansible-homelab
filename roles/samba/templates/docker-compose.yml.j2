@@ -1,0 +1,41 @@
+services:
+  samba:
+    image: {{ samba_image }}
+    container_name: samba
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      ACCOUNT_{{ samba_user }}: "{{ samba_password }}"
+      UID_{{ samba_user }}: "{{ samba_uid }}"
+      GROUP_{{ samba_user }}: "{{ samba_group }}"
+      GROUPS_{{ samba_user }}: "{{ samba_group }}"
+      # macOS Performance Optimization
+      SAMBA_GLOBAL_CONFIG_macos: |
+        min protocol = SMB3
+        max protocol = SMB3
+        aio read size = 1
+        aio write size = 1
+        socket options = TCP_NODELAY IPTOS_LOWDELAY
+        oplocks = yes
+        level2 oplocks = yes
+        ea support = yes
+        vfs objects = catia fruit streams_xattr
+        fruit:metadata = stream
+        fruit:posix_rename = yes
+        fruit:veto_appledouble = no
+        fruit:wipe_intentionally_left_blank_rfork = yes
+        fruit:delete_empty_adfiles = yes
+      SAMBA_VOLUME_CONFIG_{{ samba_share_name }}: |
+        [{{ samba_share_name }}]
+        path={{ samba_container_path }}
+        valid users = {{ samba_user }}
+        read only = no
+        browsable = yes
+        force user = {{ samba_user }}
+        force group = {{ samba_user }}
+        create mask = 0664
+        directory mask = 0775
+        veto files = /._*/.DS_Store/
+        delete veto files = yes
+    volumes:
+      - {{ samba_host_path }}:{{ samba_container_path }}

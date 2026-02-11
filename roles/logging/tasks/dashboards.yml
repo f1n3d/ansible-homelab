@@ -1,0 +1,12 @@
+---
+# Dashboard Provisioning Tasks
+
+- name: Deploy Grafana dashboards
+  ansible.builtin.copy:
+    src: "dashboard-{{ item }}.json"
+    dest: "{{ grafana_data_path }}/dashboards/{{ item }}.json"
+    mode: '0644'
+    owner: root
+    group: root
+  loop: "{{ logging_dashboards }}"
+  notify: Restart logging stack

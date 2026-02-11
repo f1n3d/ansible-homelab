@@ -1,0 +1,86 @@
+---
+# Paperless-NGX Default Configuration
+# Override these values in vars/paperless_secrets.yml or playbook vars
+
+# Installation
+paperless_install_path: /opt/paperless
+
+# Docker Images
+paperless_image: ghcr.io/paperless-ngx/paperless-ngx:latest
+paperless_postgres_image: postgres:18
+paperless_redis_image: redis:8
+paperless_tika_image: apache/tika:latest
+paperless_gotenberg_image: gotenberg/gotenberg:8.25
+
+# Network/Service
+paperless_port: 8000
+
+# Database
+paperless_postgres_db: paperless
+paperless_postgres_user: paperless
+# paperless_postgres_password: defined in secrets
+
+# Redis
+paperless_redis_url: redis://broker:6379
+
+# Tika/Gotenberg (Office document support)
+paperless_tika_enabled: 1
+paperless_tika_endpoint: http://tika:9998
+paperless_gotenberg_endpoint: http://gotenberg:3000
+
+# User mapping (set to your host user's UID/GID)
+paperless_usermap_uid: 1000
+paperless_usermap_gid: 1000
+
+# Timezone
+paperless_timezone: "UTC"
+
+# OCR Settings
+paperless_ocr_language: "eng"
+paperless_ocr_mode: redo
+paperless_ocr_skip_archive_file: with_text
+paperless_ocr_image_dpi: 600
+paperless_ocr_clean: clean
+# Additional OCR languages to install (space-separated)
+# See: https://packages.debian.org/search?keywords=tesseract-ocr-&searchon=names
+paperless_ocr_languages: ""
+
+# Application URL (for external access)
+# paperless_url: defined in secrets
+
+# Secret Key (for session encryption - generate a long random string)
+# paperless_secret_key: defined in secrets
+
+# Task workers
+paperless_task_workers: 2
+paperless_threads_per_worker: 2
+
+# Consumer settings
+paperless_consumer_recursive: "true"
+paperless_consumer_subdirs_as_tags: "false"
+
+# Filename format for archived documents
+# See: https://docs.paperless-ngx.com/advanced_usage/#file-name-handling
+paperless_filename_format: ""
+
+# Admin user (created on first start)
+# paperless_admin_user: defined in secrets
+# paperless_admin_password: defined in secrets
+# paperless_admin_email: defined in secrets
+
+# OIDC Configuration (optional)
+# Enable by setting paperless_oidc_enabled: true in secrets file
+paperless_oidc_enabled: false
+paperless_oidc_provider_id: "authentik"
+paperless_oidc_provider_name: "Authentik"
+paperless_oidc_issuer: ""
+# paperless_oidc_client_id: defined in secrets
+# paperless_oidc_client_secret: defined in secrets
+
+# OIDC Account Settings
+# Allow automatic account creation for new OIDC users
+paperless_account_allow_signups: "false"
+# Skip email verification (Authentik already verified)
+paperless_socialaccount_email_verification: "none"
+# Disable regular login (only SSO login allowed, API keys still work)
+paperless_disable_regular_login: "true"

@@ -1,0 +1,484 @@
+---
+# =============================================================================
+# LXC Container Baseline Playbook
+# =============================================================================
+# Dieses Playbook bringt alle Container auf einen sicheren, einheitlichen Stand
+# Firewall wird über Proxmox verwaltet
+# Ausführen mit: ansible-playbook playbooks/baseline.yml
+# =============================================================================
+
+- name: LXC Container Baseline Setup
+  hosts: lxc_containers
+  vars:
+    # SSH-Konfiguration
+    ssh_port: 22
+    ssh_permit_root: "prohibit-password"
+    ssh_password_auth: "no"
+    
+    # Automatische Updates
+    auto_update_day: "Sun"
+    auto_update_time: "03:00"
+
+    # SSH Kryptographie (OpenSSH >= 8.x kompatibel)
+    ssh_ciphers: "chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr"
+    ssh_macs: "hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,umac-128-etm@openssh.com"
+    ssh_kex_algorithms: "sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512"
+    ssh_host_key_algorithms: "ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,rsa-sha2-512,rsa-sha2-256"
+
+    # Shell-Timeout (Sekunden)
+    shell_timeout: 900
+
+    # Login-Banner
+    login_banner: |
+      **************************************************************************
+      *  WARNUNG: Unbefugter Zugriff auf dieses System ist untersagt.         *
+      *  Alle Verbindungen werden protokolliert und ueberwacht.               *
+      *  Durch die Nutzung dieses Systems stimmen Sie der Ueberwachung zu.    *
+      **************************************************************************
+
+  tasks:
+    # =========================================================================
+    # BOOTSTRAP (für frische Container)
+    # =========================================================================
+    - name: Python installieren (falls noch nicht vorhanden)
+      raw: test -e /usr/bin/python3 || (apt-get update && apt-get install -y python3)
+      changed_when: false
+
+    # =========================================================================
+    # GRUNDLEGENDE PAKETE
+    # =========================================================================
+    - name: APT Cache aktualisieren
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Grundlegende Pakete installieren
+      apt:
+        name:
+          - curl
+          - wget
+          - htop
+          - vim
+          - git
+          - ca-certificates
+          - gnupg
+          - lsb-release
+          - apt-transport-https
+          - unattended-upgrades
+          - apt-listchanges
+          - fail2ban
+          - python3
+          - python3-pip
+        state: present
+
+    # =========================================================================
+    # DOCKER INSTALLATION
+    # =========================================================================
+    - name: Alte Docker-Versionen entfernen
+      apt:
+        name:
+          - docker
+          - docker-engine
+          - docker.io
+          - containerd
+          - runc
+        state: absent
+      ignore_errors: yes
+
+    - name: Docker GPG Key hinzufügen
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/debian/gpg
+        dest: /tmp/docker.gpg
+        mode: '0644'
+
+    - name: Docker GPG Key konvertieren und speichern
+      ansible.builtin.shell: |
+        mkdir -p /etc/apt/keyrings
+        gpg --dearmor -o /etc/apt/keyrings/docker.gpg < /tmp/docker.gpg
+        chmod a+r /etc/apt/keyrings/docker.gpg
+      args:
+        creates: /etc/apt/keyrings/docker.gpg
+
+    - name: Docker Repository hinzufügen
+      apt_repository:
+        repo: "deb [arch={{ ansible_architecture }} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
+        state: present
+        filename: docker
+        update_cache: yes
+
+    - name: Docker installieren
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Docker-Dienst aktivieren und starten
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Docker Daemon Sicherheitskonfiguration erstellen
+      copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "live-restore": true,
+            "no-new-privileges": true,
+            "log-driver": "json-file",
+            "log-opts": {
+              "max-size": "10m",
+              "max-file": "3"
+            }
+          }
+        mode: '0644'
+      notify: Restart Docker
+
+    # =========================================================================
+    # SSH HARDENING
+    # =========================================================================
+    - name: SSH-Konfiguration härten
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        state: present
+        backup: yes
+      loop:
+        - { regexp: '^#?Port', line: 'Port {{ ssh_port }}' }
+        - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin {{ ssh_permit_root }}' }
+        - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication {{ ssh_password_auth }}' }
+        - { regexp: '^#?PermitEmptyPasswords', line: 'PermitEmptyPasswords no' }
+        - { regexp: '^#?X11Forwarding', line: 'X11Forwarding no' }
+        - { regexp: '^#?MaxAuthTries', line: 'MaxAuthTries 3' }
+        - { regexp: '^#?ClientAliveInterval', line: 'ClientAliveInterval 300' }
+        - { regexp: '^#?ClientAliveCountMax', line: 'ClientAliveCountMax 2' }
+        - { regexp: '^#?AllowAgentForwarding', line: 'AllowAgentForwarding no' }
+        - { regexp: '^#?AllowTcpForwarding', line: 'AllowTcpForwarding no' }
+        # Zusätzliche SSH-Härtung
+        - { regexp: '^#?LoginGraceTime', line: 'LoginGraceTime 30' }
+        - { regexp: '^#?MaxSessions', line: 'MaxSessions 3' }
+        - { regexp: '^#?UseDNS', line: 'UseDNS no' }
+        # Kryptographie-Einschraenkungen (nur moderne Algorithmen)
+        - { regexp: '^#?Ciphers', line: 'Ciphers {{ ssh_ciphers }}' }
+        - { regexp: '^#?MACs', line: 'MACs {{ ssh_macs }}' }
+        - { regexp: '^#?KexAlgorithms', line: 'KexAlgorithms {{ ssh_kex_algorithms }}' }
+        - { regexp: '^#?HostKeyAlgorithms', line: 'HostKeyAlgorithms {{ ssh_host_key_algorithms }}' }
+      notify: Restart SSH
+
+    # =========================================================================
+    # SSH LOGIN BANNER
+    # =========================================================================
+    - name: Login-Banner erstellen
+      copy:
+        dest: /etc/issue.net
+        content: "{{ login_banner }}"
+        mode: '0644'
+
+    - name: SSH Banner in sshd_config aktivieren
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?Banner'
+        line: 'Banner /etc/issue.net'
+        state: present
+      notify: Restart SSH
+
+    # =========================================================================
+    # FAIL2BAN
+    # =========================================================================
+    - name: Fail2Ban SSH-Jail konfigurieren
+      copy:
+        dest: /etc/fail2ban/jail.local
+        content: |
+          [DEFAULT]
+          bantime = 1h
+          findtime = 10m
+          maxretry = 5
+          
+          [sshd]
+          enabled = true
+          port = {{ ssh_port }}
+          filter = sshd
+          logpath = /var/log/auth.log
+          maxretry = 3
+          bantime = 24h
+        mode: '0644'
+      notify: Restart Fail2Ban
+
+    # =========================================================================
+    # AUTOMATISCHE UPDATES
+    # =========================================================================
+    - name: Unattended-Upgrades konfigurieren
+      copy:
+        dest: /etc/apt/apt.conf.d/50unattended-upgrades
+        content: |
+          Unattended-Upgrade::Allowed-Origins {
+              "${distro_id}:${distro_codename}";
+              "${distro_id}:${distro_codename}-security";
+              "${distro_id}:${distro_codename}-updates";
+          };
+          
+          Unattended-Upgrade::Package-Blacklist {
+          };
+          
+          Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+          Unattended-Upgrade::MinimalSteps "true";
+          Unattended-Upgrade::Remove-Unused-Dependencies "true";
+          Unattended-Upgrade::Automatic-Reboot "false";
+          Unattended-Upgrade::Automatic-Reboot-Time "04:00";
+        mode: '0644'
+
+    - name: Auto-Upgrades aktivieren
+      copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          APT::Periodic::Download-Upgradeable-Packages "1";
+          APT::Periodic::AutocleanInterval "7";
+        mode: '0644'
+
+    - name: Wöchentlichen Update-Timer erstellen
+      copy:
+        dest: /etc/systemd/system/weekly-upgrade.timer
+        content: |
+          [Unit]
+          Description=Wöchentliches System-Upgrade
+          
+          [Timer]
+          OnCalendar={{ auto_update_day }} {{ auto_update_time }}
+          Persistent=true
+          RandomizedDelaySec=1800
+          
+          [Install]
+          WantedBy=timers.target
+        mode: '0644'
+      notify: Enable Weekly Upgrade Timer
+
+    - name: Wöchentlichen Update-Service erstellen
+      copy:
+        dest: /etc/systemd/system/weekly-upgrade.service
+        content: |
+          [Unit]
+          Description=Wöchentliches System-Upgrade durchführen
+          
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/bin/apt-get update
+          ExecStart=/usr/bin/apt-get upgrade -y
+          ExecStart=/usr/bin/apt-get autoremove -y
+          ExecStart=/usr/bin/apt-get autoclean
+        mode: '0644'
+
+    # =========================================================================
+    # SYSTEM-HÄRTUNG
+    # =========================================================================
+    - name: Netzwerk-Kernel-Parameter für Sicherheit setzen
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        sysctl_file: /etc/sysctl.d/99-security.conf
+        reload: yes
+      loop:
+        # IPv4 Netzwerk-Härtung
+        - { name: 'net.ipv4.tcp_syncookies', value: '1' }
+        - { name: 'net.ipv4.conf.all.rp_filter', value: '1' }
+        - { name: 'net.ipv4.conf.default.rp_filter', value: '1' }
+        - { name: 'net.ipv4.icmp_echo_ignore_broadcasts', value: '1' }
+        - { name: 'net.ipv4.conf.all.accept_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.default.accept_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.all.send_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.default.send_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.all.accept_source_route', value: '0' }
+        - { name: 'net.ipv4.conf.default.accept_source_route', value: '0' }
+        # IPv6 deaktivieren
+        - { name: 'net.ipv6.conf.all.disable_ipv6', value: '1' }
+        - { name: 'net.ipv6.conf.default.disable_ipv6', value: '1' }
+
+    # HINWEIS: Kernel-Security-Parameter (kernel.randomize_va_space, kernel.kptr_restrict,
+    # kernel.dmesg_restrict, vm.mmap_min_addr, fs.suid_dumpable) können in LXC-Containern
+    # NICHT gesetzt werden. Diese müssen auf dem Proxmox-Host konfiguriert werden.
+    # Core Dumps werden stattdessen über limits.conf deaktiviert (siehe unten).
+
+    - name: Core Dumps via limits.conf deaktivieren
+      copy:
+        dest: /etc/security/limits.d/99-disable-coredumps.conf
+        content: |
+          # Core Dumps deaktiviert - Sicherheitsmassnahme
+          *     hard   core    0
+          *     soft   core    0
+          root  hard   core    0
+          root  soft   core    0
+        mode: '0644'
+
+    # =========================================================================
+    # LOGIN- UND SESSION-HAERTUNG
+    # =========================================================================
+    - name: Shell-Timeout (TMOUT) systemweit setzen
+      copy:
+        dest: /etc/profile.d/99-shell-timeout.sh
+        content: |
+          # Automatischer Logout bei Inaktivitaet
+          # Gesetzt durch Ansible Baseline Playbook
+          readonly TMOUT={{ shell_timeout }}
+          export TMOUT
+        mode: '0644'
+
+    - name: Systemweite Umask auf 027 setzen
+      copy:
+        dest: /etc/profile.d/99-umask.sh
+        content: |
+          # Restriktive Default-Permissions
+          # Gesetzt durch Ansible Baseline Playbook
+          umask 027
+        mode: '0644'
+
+    - name: login.defs haerten
+      lineinfile:
+        path: /etc/login.defs
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        state: present
+        backup: yes
+      loop:
+        - { regexp: '^UMASK', line: 'UMASK           027' }
+        - { regexp: '^#?SHA_CRYPT_MIN_ROUNDS', line: 'SHA_CRYPT_MIN_ROUNDS 10000' }
+        - { regexp: '^#?SHA_CRYPT_MAX_ROUNDS', line: 'SHA_CRYPT_MAX_ROUNDS 50000' }
+        - { regexp: '^#?LOGIN_RETRIES', line: 'LOGIN_RETRIES           3' }
+        - { regexp: '^#?LOGIN_TIMEOUT', line: 'LOGIN_TIMEOUT           30' }
+        - { regexp: '^#?FAIL_DELAY', line: 'FAIL_DELAY              4' }
+        - { regexp: '^#?LOG_OK_LOGINS', line: 'LOG_OK_LOGINS           yes' }
+        - { regexp: '^#?LOG_UNKFAIL_ENAB', line: 'LOG_UNKFAIL_ENAB        yes' }
+
+    # =========================================================================
+    # LOGGING
+    # =========================================================================
+    - name: Journald für persistentes Logging konfigurieren
+      lineinfile:
+        path: /etc/systemd/journald.conf
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^#?Storage=', line: 'Storage=persistent' }
+        - { regexp: '^#?SystemMaxUse=', line: 'SystemMaxUse=500M' }
+        - { regexp: '^#?MaxRetentionSec=', line: 'MaxRetentionSec=1month' }
+      notify: Restart Journald
+
+    # HINWEIS: Auditd kann in LXC-Containern NICHT verwendet werden, da es
+    # Kernel-Audit-Subsystem-Zugriff benötigt. Audit-Logging muss auf dem
+    # Proxmox-Host konfiguriert werden.
+
+    # =========================================================================
+    # FILE PERMISSIONS
+    # =========================================================================
+    - name: Root Home-Verzeichnis absichern
+      file:
+        path: /root
+        mode: '0700'
+
+    # =========================================================================
+    # CLEANUP
+    # =========================================================================
+    - name: systemd-networkd und wait-online deaktivieren (unnoetig in LXC)
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: no
+        masked: yes
+      loop:
+        - systemd-networkd-wait-online
+        - systemd-networkd
+      ignore_errors: yes
+
+    - name: systemd-networkd-wait-online Override-Verzeichnis erstellen
+      ansible.builtin.file:
+        path: /etc/systemd/system/systemd-networkd-wait-online.service.d
+        state: directory
+        mode: '0755'
+
+    - name: systemd-networkd-wait-online durch /bin/true ersetzen (verhindert dpkg-Fehler)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/systemd-networkd-wait-online.service.d/override.conf
+        content: |
+          [Service]
+          ExecStart=
+          ExecStart=/bin/true
+        mode: '0644'
+      register: networkd_override
+
+    - name: Systemd daemon-reload nach Override
+      ansible.builtin.systemd:
+        daemon_reload: yes
+      when: networkd_override.changed
+
+    - name: Unnoetige und potenziell unsichere Pakete entfernen
+      apt:
+        name:
+          - gcc
+          - g++
+          - make
+          - cpp
+          - binutils
+          - telnet
+          - rsh-client
+          - talk
+          - ftp
+          - netcat-traditional
+        state: absent
+        purge: no
+      ignore_errors: yes
+
+    - name: System-Update und Cleanup durchführen
+      apt:
+        upgrade: dist
+        update_cache: yes
+        autoclean: yes
+        autoremove: yes
+
+    # =========================================================================
+    # GRAFANA ALLOY (LOG FORWARDING)
+    # =========================================================================
+    - name: Deploy Grafana Alloy
+      ansible.builtin.include_role:
+        name: baseline
+        tasks_from: alloy
+        apply:
+          tags: [alloy, logging]
+      tags: [alloy, logging]
+
+  # ===========================================================================
+  # HANDLERS
+  # ===========================================================================
+  handlers:
+    - name: Restart SSH
+      systemd:
+        name: sshd
+        state: restarted
+
+    - name: Restart Fail2Ban
+      systemd:
+        name: fail2ban
+        state: restarted
+        enabled: yes
+
+    - name: Restart Journald
+      systemd:
+        name: systemd-journald
+        state: restarted
+
+    - name: Restart Docker
+      systemd:
+        name: docker
+        state: restarted
+
+    - name: Enable Weekly Upgrade Timer
+      systemd:
+        name: weekly-upgrade.timer
+        enabled: yes
+        state: started
+        daemon_reload: yes

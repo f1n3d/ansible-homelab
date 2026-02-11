@@ -1,0 +1,37 @@
+# {{ ansible_managed }}
+# Contact API Systemd Service
+
+[Unit]
+Description=Contact Form API (Flask/Gunicorn)
+After=network.target postfix.service
+Wants=postfix.service
+
+[Service]
+Type=notify
+User=root
+Group=root
+WorkingDirectory={{ contact_api_install_path }}
+Environment="PATH={{ contact_api_install_path }}/venv/bin"
+ExecStart={{ contact_api_install_path }}/venv/bin/gunicorn \
+    --bind 0.0.0.0:{{ contact_api_port }} \
+    --workers 2 \
+    --timeout 30 \
+    --access-logfile - \
+    --error-logfile - \
+    --capture-output \
+    app:app
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=10
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths={{ contact_api_install_path }}
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,41 @@
+---
+# Postfix Send-only Mail Server (GMX Relay)
+
+- name: Install postfix and dependencies
+  ansible.builtin.apt:
+    name:
+      - postfix
+      - libsasl2-modules
+    state: present
+
+- name: Deploy postfix main.cf
+  ansible.builtin.template:
+    src: postfix/main.cf.j2
+    dest: /etc/postfix/main.cf
+    mode: "0644"
+  notify: Restart Postfix
+
+- name: Create SASL password file
+  ansible.builtin.copy:
+    dest: /etc/postfix/sasl_passwd
+    content: "{{ postfix_relay_host }} {{ postfix_sasl_user }}:{{ postfix_sasl_password }}"
+    mode: "0600"
+    owner: root
+    group: root
+  notify: Postmap sasl_passwd
+  no_log: true
+
+- name: Create sender_canonical file
+  ansible.builtin.copy:
+    dest: /etc/postfix/sender_canonical
+    content: |
+      root {{ postfix_sender_address }}
+      @{{ ansible_hostname }} {{ postfix_sender_address }}
+    mode: "0644"
+  notify: Postmap sender_canonical
+
+- name: Ensure postfix is enabled and started
+  ansible.builtin.systemd:
+    name: postfix
+    enabled: yes
+    state: started

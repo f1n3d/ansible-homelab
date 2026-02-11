@@ -1,0 +1,116 @@
+---
+# Logging Role - Main Tasks
+# Deploy Loki + Grafana Logging Stack on chronicle server
+
+- name: Create logging base directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  loop:
+    - "{{ logging_install_path }}"
+    - "{{ loki_data_path }}"
+    - "{{ grafana_data_path }}"
+    - "{{ grafana_data_path }}/dashboards"
+
+- name: Detect latest Loki version from GitHub
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/grafana/loki/releases/latest"
+    return_content: yes
+  register: loki_release
+  failed_when: false
+  changed_when: false
+
+- name: Set Loki version (from GitHub or fallback)
+  ansible.builtin.set_fact:
+    loki_version: "{{ loki_release.json.tag_name | regex_replace('^v', '') if (loki_release.status | default(0)) == 200 else loki_fallback_version }}"
+
+- name: Detect latest Grafana version from GitHub
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/grafana/grafana/releases/latest"
+    return_content: yes
+  register: grafana_release
+  failed_when: false
+  changed_when: false
+
+- name: Set Grafana version (from GitHub or fallback)
+  ansible.builtin.set_fact:
+    grafana_version: "{{ grafana_release.json.tag_name | regex_replace('^v', '') if (grafana_release.status | default(0)) == 200 else grafana_fallback_version }}"
+
+- name: Include Loki setup tasks
+  ansible.builtin.include_tasks: loki.yml
+
+- name: Include Grafana setup tasks
+  ansible.builtin.include_tasks: grafana.yml
+
+- name: Include Dashboard provisioning tasks
+  ansible.builtin.include_tasks: dashboards.yml
+  when: logging_provision_dashboards
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ logging_install_path }}/docker-compose.yml"
+    mode: '0644'
+    owner: root
+    group: root
+  notify: Restart logging stack
+
+- name: Deploy update script
+  ansible.builtin.template:
+    src: update.sh.j2
+    dest: "{{ logging_install_path }}/update.sh"
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Setup automatic updates via cron
+  ansible.builtin.cron:
+    name: "Logging stack update (Loki + Grafana)"
+    weekday: "{{ logging_update_weekday }}"
+    hour: "{{ logging_update_hour }}"
+    minute: "{{ logging_update_minute }}"
+    job: "{{ logging_install_path }}/update.sh >> {{ logging_install_path }}/update.log 2>&1"
+    user: root
+    state: "{{ 'present' if logging_update_enabled else 'absent' }}"
+
+- name: Start logging stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ logging_install_path }}"
+    state: present
+    pull: missing
+
+- name: Wait for Loki to become ready
+  ansible.builtin.uri:
+    url: "http://localhost:{{ loki_http_port }}/ready"
+    status_code: 200
+  register: loki_health
+  until: loki_health.status == 200
+  retries: 30
+  delay: 5
+  ignore_errors: true
+
+- name: Wait for Grafana to become ready
+  ansible.builtin.uri:
+    url: "http://localhost:{{ grafana_http_port }}/api/health"
+    status_code: 200
+  register: grafana_health
+  until: grafana_health.status == 200
+  retries: 30
+  delay: 5
+  ignore_errors: true
+
+- name: Fail if services are not healthy
+  ansible.builtin.fail:
+    msg: |
+      Logging stack health checks failed!
+
+      Loki: {{ 'HEALTHY' if (loki_health.status | default(0)) == 200 else 'UNHEALTHY' }}
+      Grafana: {{ 'HEALTHY' if (grafana_health.status | default(0)) == 200 else 'UNHEALTHY' }}
+
+      Check logs:
+        docker logs loki
+        docker logs grafana
+  when: (loki_health.status | default(200)) != 200 or (grafana_health.status | default(200)) != 200

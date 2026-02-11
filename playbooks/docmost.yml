@@ -1,0 +1,8 @@
+---
+# Docmost Deployment Playbook
+# Voraussetzung: Baseline-Playbook wurde bereits ausgeführt (Docker installiert)
+
+- name: Deploy Docmost
+  hosts: docmost
+  roles:
+    - docmost

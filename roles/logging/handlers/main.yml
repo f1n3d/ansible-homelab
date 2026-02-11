@@ -1,0 +1,8 @@
+---
+# Logging Handlers
+
+- name: Restart logging stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ logging_install_path }}"
+    state: present
+    pull: missing

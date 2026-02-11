@@ -1,0 +1,14 @@
+---
+# Grafana / Logging Stack Secrets
+# Copy to vault.yml and encrypt: ansible-vault encrypt vault.yml
+
+# Grafana Admin Account
+grafana_admin_user: "admin"
+grafana_admin_password: "CHANGE_ME"
+grafana_domain: "grafana.example.com"
+
+# OIDC Configuration (optional - requires Authentik)
+# Uncomment and fill in if using Authentik for SSO
+# grafana_oidc_client_id: ""
+# grafana_oidc_client_secret: ""
+# grafana_oidc_issuer: "https://auth.example.com/application/o/grafana/"

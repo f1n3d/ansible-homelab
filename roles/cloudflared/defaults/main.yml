@@ -1,0 +1,11 @@
+---
+# Defaults für Cloudflared Role
+
+# Container Image
+cloudflared_image: cloudflare/cloudflared:latest
+
+# Installationspfad
+cloudflared_install_path: /opt/cloudflared
+
+# Container Name
+cloudflared_container_name: cloudflared

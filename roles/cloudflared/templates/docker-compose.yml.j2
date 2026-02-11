@@ -1,0 +1,16 @@
+{{ ansible_managed | comment }}
+# Cloudflared Tunnel Docker Compose
+
+services:
+  cloudflared:
+    image: {{ cloudflared_image }}
+    container_name: {{ cloudflared_container_name }}
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
