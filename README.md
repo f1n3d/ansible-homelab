@@ -112,13 +112,33 @@ The setup script will:
 
 The baseline playbook (`playbooks/baseline.yml`) hardens every container with:
 
-- **SSH**: Key-only auth, modern ciphers, max 3 auth tries, login banner
-- **Fail2Ban**: 3 attempts = 24h ban
+- **SSH**: Key-only auth, modern ciphers (chacha20-poly1305, aes256-gcm), max 3 auth tries, login banner
+- **Fail2Ban**: 3 attempts = 24h ban, recidive jail (5x banned in 1 day = 1 week ban on all ports)
+- **Docker daemon**: no-new-privileges, icc disabled, userland-proxy disabled, log rotation
 - **Kernel hardening**: TCP SYN cookies, RP filter, IPv6 disabled, no ICMP redirects
-- **Docker hardening**: no-new-privileges, log rotation
-- **Session hardening**: 15min timeout, umask 027, strong password hashing
+- **Kernel module blacklist** (CIS Benchmark): cramfs, freevxfs, hfs, hfsplus, udf, dccp, sctp, rds, tipc
+- **PAM hardening**: su restricted to wheel group via pam_wheel
+- **Cron/At access control**: Only root allowed (/etc/cron.allow, /etc/at.deny)
+- **Session hardening**: 15min timeout, umask 027, strong password hashing (SHA rounds 10000-50000)
+- **Journald**: Persistent logging, 500MB max, 1 month retention, rate-limiting (30s/10000 burst)
 - **Auto-updates**: Weekly security updates (Sunday 03:00)
 - **Cleanup**: Removes unnecessary packages (gcc, make, telnet, ftp, etc.)
+
+### Container Hardening
+
+All Docker Compose services include `security_opt: [no-new-privileges:true]` and resource limits (memory + CPU).
+
+| Service | Memory | CPU | Extra Hardening |
+|---------|--------|-----|-----------------|
+| Cloudflared | 256M | 0.5 | non-root (65532), read_only, cap_drop ALL |
+| Paperless (webserver) | 2G | 2.0 | - |
+| Paperless (db/broker/gotenberg/tika) | 256M-1G | 0.5-1.0 | - |
+| Docmost + db + redis | 256M-1G | 0.5-1.0 | - |
+| Authentik (server/postgresql/redis) | 256M-1G | 0.5-1.0 | - |
+| Authentik (worker) | 1G | 1.0 | No security_opt (needs root + Docker socket) |
+| Samba | 512M | 1.0 | - |
+| Loki / Grafana | Configurable | Configurable | - |
+| Alloy | 256M | 0.5 | Port bound to 127.0.0.1 only |
 
 ## Centralized Logging
 
