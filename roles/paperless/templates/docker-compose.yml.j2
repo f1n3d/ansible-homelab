@@ -9,6 +9,18 @@ services:
     stop_grace_period: 30s
     volumes:
       - paperless_redis_data:/data
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   db:
     image: {{ paperless_postgres_image }}
@@ -17,6 +29,18 @@ services:
     volumes:
       - paperless_db_data:/var/lib/postgresql
     env_file: .env
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   webserver:
     image: {{ paperless_image }}
@@ -34,6 +58,18 @@ services:
       - {{ paperless_install_path }}/export:/usr/src/paperless/export
       - {{ paperless_install_path }}/consume:/usr/src/paperless/consume
     env_file: .env
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   gotenberg:
     image: {{ paperless_gotenberg_image }}
@@ -42,10 +78,34 @@ services:
       - "gotenberg"
       - "--chromium-disable-javascript=true"
       - "--chromium-allow-list=file:///tmp/.*"
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   tika:
     image: {{ paperless_tika_image }}
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   paperless_data:

@@ -39,3 +39,15 @@ services:
         delete veto files = yes
     volumes:
       - {{ samba_host_path }}:{{ samba_container_path }}
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

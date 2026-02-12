@@ -130,6 +130,8 @@
           {
             "live-restore": true,
             "no-new-privileges": true,
+            "icc": false,
+            "userland-proxy": false,
             "log-driver": "json-file",
             "log-opts": {
               "max-size": "10m",
@@ -207,6 +209,14 @@
           logpath = /var/log/auth.log
           maxretry = 3
           bantime = 24h
+
+          [recidive]
+          enabled = true
+          logpath = /var/log/fail2ban.log
+          banaction = %(banaction_allports)s
+          maxretry = 5
+          findtime = 1d
+          bantime = 1w
         mode: '0644'
       notify: Restart Fail2Ban
 
@@ -317,6 +327,67 @@
         mode: '0644'
 
     # =========================================================================
+    # KERNEL-MODULE BLACKLIST (CIS-Benchmark)
+    # =========================================================================
+    - name: Unsichere Kernel-Module blacklisten
+      copy:
+        dest: /etc/modprobe.d/hardening.conf
+        content: |
+          # Ungenutzte Dateisysteme deaktivieren (CIS 1.1.1.x)
+          install cramfs /bin/true
+          install freevxfs /bin/true
+          install hfs /bin/true
+          install hfsplus /bin/true
+          install udf /bin/true
+          # Ungenutzte Netzwerkprotokolle deaktivieren (CIS 3.4.x)
+          install dccp /bin/true
+          install sctp /bin/true
+          install rds /bin/true
+          install tipc /bin/true
+        mode: '0644'
+
+    # =========================================================================
+    # PAM - su EINSCHRAENKEN
+    # =========================================================================
+    - name: Gruppe wheel erstellen
+      group:
+        name: wheel
+        state: present
+
+    - name: Root zur Gruppe wheel hinzufuegen
+      user:
+        name: root
+        groups: wheel
+        append: yes
+
+    - name: su via pam_wheel einschraenken
+      lineinfile:
+        path: /etc/pam.d/su
+        regexp: '^#?\s*auth\s+required\s+pam_wheel\.so'
+        line: 'auth required pam_wheel.so'
+        state: present
+
+    # =========================================================================
+    # CRON/AT ZUGRIFF EINSCHRAENKEN
+    # =========================================================================
+    - name: Cron-Zugriff auf root beschraenken
+      copy:
+        dest: /etc/cron.allow
+        content: |
+          root
+        mode: '0600'
+        owner: root
+        group: root
+
+    - name: At-Zugriff einschraenken
+      copy:
+        dest: /etc/at.deny
+        content: ""
+        mode: '0600'
+        owner: root
+        group: root
+
+    # =========================================================================
     # LOGIN- UND SESSION-HAERTUNG
     # =========================================================================
     - name: Shell-Timeout (TMOUT) systemweit setzen
@@ -367,6 +438,8 @@
         - { regexp: '^#?Storage=', line: 'Storage=persistent' }
         - { regexp: '^#?SystemMaxUse=', line: 'SystemMaxUse=500M' }
         - { regexp: '^#?MaxRetentionSec=', line: 'MaxRetentionSec=1month' }
+        - { regexp: '^#?RateLimitIntervalSec=', line: 'RateLimitIntervalSec=30s' }
+        - { regexp: '^#?RateLimitBurst=', line: 'RateLimitBurst=10000' }
       notify: Restart Journald
 
     # HINWEIS: Auditd kann in LXC-Containern NICHT verwendet werden, da es

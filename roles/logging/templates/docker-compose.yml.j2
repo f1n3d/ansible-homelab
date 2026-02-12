@@ -27,6 +27,8 @@ services:
     command: -config.file=/etc/loki/loki-config.yml
     networks:
       - logging
+    security_opt:
+      - no-new-privileges:true
     logging:
       driver: "json-file"
       options:
@@ -64,6 +66,8 @@ services:
       - loki
     networks:
       - logging
+    security_opt:
+      - no-new-privileges:true
     logging:
       driver: "json-file"
       options:

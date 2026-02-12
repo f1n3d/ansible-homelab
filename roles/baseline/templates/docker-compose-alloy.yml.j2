@@ -14,7 +14,19 @@ services:
     command: run --storage.path=/var/lib/alloy --server.http.listen-addr=0.0.0.0:{{ alloy_http_port }} /etc/alloy/config.alloy
 
     ports:
-      - "{{ alloy_http_port }}:{{ alloy_http_port }}"
+      - "127.0.0.1:{{ alloy_http_port }}:{{ alloy_http_port }}"
+
+    security_opt:
+      - no-new-privileges:true
+
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
 
     logging:
       driver: "json-file"

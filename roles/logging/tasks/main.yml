@@ -37,7 +37,7 @@
 
 - name: Set Grafana version (from GitHub or fallback)
   ansible.builtin.set_fact:
-    grafana_version: "{{ grafana_release.json.tag_name | regex_replace('^v', '') if (grafana_release.status | default(0)) == 200 else grafana_fallback_version }}"
+    grafana_version: "{{ grafana_release.json.tag_name | regex_replace('^v', '') | regex_replace('\\+.*$', '') if (grafana_release.status | default(0)) == 200 else grafana_fallback_version }}"
 
 - name: Include Loki setup tasks
   ansible.builtin.include_tasks: loki.yml
